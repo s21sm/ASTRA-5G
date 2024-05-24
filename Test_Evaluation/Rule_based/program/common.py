@@ -1,0 +1,809 @@
+import os
+import re
+import json
+import subprocess
+from datetime import datetime
+from reportlab.lib import colors
+from reportlab.lib.pagesizes import letter
+from reportlab.platypus.paragraph import Paragraph
+from reportlab.platypus.flowables import KeepInFrame
+from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+from reportlab.platypus import SimpleDocTemplate, LongTable, TableStyle, Paragraph, KeepTogether, Preformatted
+from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, PageTemplate, Frame
+
+
+
+def convert_to_readable(word):
+    return ' '.join(word.split('_'))
+    
+def table_creator(table_data):
+
+    now = datetime.now()
+    date_time_text = now.strftime("%Y-%m-%d %H:%M:%S")
+
+
+    date_time_style = ParagraphStyle(name="DateStyle", fontSize=7, leftIndent=105)
+    date_time_paragraph = Paragraph(f"UE Response Evaluation Report: Test time: {date_time_text}", date_time_style)
+
+
+    pdf_filename = "report.pdf"
+    doc = SimpleDocTemplate(pdf_filename, pagesize=letter, leftMargin=0.0,rightMargin=0.0)
+
+
+    table_style = TableStyle([
+        ('GRID', (0, 0), (-1, -1), 1, colors.black),
+        ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+        ('ALIGN', (0, 0), (-1, -1), 'LEFT'),
+        ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+        ('TEXTCOLOR', (0, 0), (-1, 0), colors.black),
+        ('BACKGROUND', (0, 0), (-1, 0), colors.grey),
+        ('LEFTPADDING', (0, 0), (-1, -1), 5), 
+        ('RIGHTPADDING', (0, 0), (-1, -1), 5),  
+        ('TOPPADDING', (0, 0), (-1, -1), 3),  
+        ('BOTTOMPADDING', (0, 0), (-1, -1), 3),  
+    ])
+
+
+    styles = getSampleStyleSheet()
+    custom_style = styles["Normal"]
+    custom_style.fontSize = 6
+
+
+
+    styles3 = getSampleStyleSheet()
+    custom_style3 = styles3["Normal"]
+    custom_style3.fontSize = 6
+    custom_style3.alignment = 1 
+
+    column2 = getSampleStyleSheet()
+    column2_style = column2["Normal"]
+    column2_style.fontSize = 6
+    column2_style.leading = 8
+    column2_style.alignment = 1 
+
+    column3 = getSampleStyleSheet()
+    column3_style = column3["Normal"]
+    column3_style.fontSize = 6
+    column3_style.leading = 8
+
+    column5 = getSampleStyleSheet()
+    column5_style = column5["Normal"]
+    column5_style.fontSize = 6
+    column5_style.leading = 8
+    
+    column6 = getSampleStyleSheet()
+    column6_style = column6["Normal"]
+    column6_style.fontSize = 6
+    column6_style.leading = 8
+
+         
+    for row_idx, row in enumerate(table_data):
+        for i, cell in enumerate(row):
+            if row_idx == 0: 
+                row[i] = Paragraph(cell, custom_style3)
+            else:  
+                if i == 0:
+                    row[i] = Paragraph(cell, custom_style)
+                elif i == 1:
+                    row[i] = Paragraph(cell, column2_style)
+                elif i == 2:
+                    row[i] = Preformatted(cell, column3_style)
+                elif i == 3:            
+                    row[i] = Paragraph(cell, column5_style)
+                elif i == 4:
+                    if cell == 'Pass':
+                        cell_color = colors.green 
+                    elif cell == 'Fail':
+                        cell_color = colors.red 
+                    elif cell =='Inconclusive':
+                        cell_color = colors.orange
+                    else:
+                        cell_color = colors.black  
+                    column4 = getSampleStyleSheet()
+                    column4_style = column4["Normal"]
+                    column4_style.fontSize = 6
+                    column4_style.textColor = cell_color
+                    column4_style.alignment = 1
+                    row[i] = Preformatted(cell, column4_style)
+                elif i ==5:
+                    row[i]= Paragraph(cell, column6_style)
+
+    col_widths = [doc.width / 20, doc.width / 12, doc.width /3, doc.width / 6, doc.width / 15, doc.width / 6]  
+    table = LongTable(table_data, colWidths=col_widths)
+    table.setStyle(table_style)
+
+    content = [date_time_paragraph, table]
+    doc.build(content)
+
+
+def test_case_content_retrieve(testcase_file):
+
+    with open(testcase_file, 'r') as file: # to check AKA or post-AKA
+        data = json.load(file)
+
+    for index, element in enumerate(data, start=1):
+        ue_ul_handle = element["ue_ul_handle"]
+        if ue_ul_handle != "null":
+        
+            testcase_content = element
+            keys = list(testcase_content.keys())
+            values = list(testcase_content.values())
+
+
+            if isinstance(values[3], dict):
+                dl_params_keys = list(values[3].keys())
+                dl_params_values = list(values[3].values())
+                
+    return dl_params_keys,dl_params_values
+    
+def ul_dl_command_search(testcase_file_path):
+
+    if os.path.exists(testcase_file_path):
+        with open(testcase_file_path, 'r') as file: 
+            data = json.load(file)
+           
+            for index, element in enumerate(data, start=1):
+                ue_ul_handle = element["ue_ul_handle"]
+                if ue_ul_handle != "null":
+                    return element
+    else:
+        print('Check testcase')
+        return None
+
+def extract_file_names(pcap_directory):
+    file_names = os.listdir(pcap_directory)
+    return sorted(file_names)
+
+
+def remove_extension(name):
+    return name[:-5]  # removing ".pcap" from the file name
+
+def check_paths(file_name,pcap_directory,testcase_directory):
+    testcase_file_path = f"{testcase_directory}/{file_name}.json"
+    pacp_file_path = f"{pcap_directory}/{file_name}.pcap"
+    return os.path.exists(testcase_file_path) and os.path.exists(pacp_file_path), testcase_file_path, pacp_file_path
+    
+        
+
+def get_ul_dl_index_in_slice(lines, ul_command, dl_command):
+
+    ul_indices = []
+    dl_indices = []
+    
+    dl_command_line = None
+    slice_between = None
+
+    lines = lines.strip().split('\n')
+
+    for index, line in enumerate(lines):
+        if ul_command.lower() in line.lower():
+            ul_indices.append(index)
+        if dl_command.lower() in line.lower():
+            dl_indices.append(index)
+            
+    
+    
+    for i, line in enumerate(lines, start=0):
+        if 'UEContextReleaseCommand' in line:
+            dl_indices = [dl_indices[-1]]  
+            break
+    else: # for else,  this is important to check if 'UEContextReleaseCommand'  present or not, this should not be bloked
+        return None  
+     
+    
+            
+
+    if ul_indices and dl_indices:
+        end_index = dl_indices[-1]
+        result = [value for value in ul_indices if value < end_index]
+        if result:
+            start_index = result[-1]
+            dl_command_line = end_index
+            selected_slice = lines[start_index:]  # Slice from start_index to the end
+            slice_between = '\n'.join(selected_slice)
+
+    if slice_between is None and dl_command_line is None:
+        return None
+
+    return slice_between, dl_command_line
+
+   
+def find_last_uplink_index(my_list, pattern):
+    state = 0
+    last_uplink_index = None
+
+    for index, item in enumerate(my_list):
+        if pattern[state] in item:
+            state += 1
+
+            if state == len(pattern):
+                state = 0
+                last_uplink_index = index
+
+    return last_uplink_index
+    
+     
+def response_retrieve(pcap_string,uplink_command,downlink_command): 
+    
+    lines = pcap_string.splitlines()
+    uplink = 'UplinkNASTransport'
+    UE_answer = None
+    pattern = ['DownlinkNASTransport', 'UEContextReleaseCommand', 'UplinkNASTransport']
+    last_uplink_index = find_last_uplink_index(lines, pattern)
+    
+    if last_uplink_index is not None:
+        target_line = lines[last_uplink_index]
+        indx = target_line.find(uplink)
+        UE_answer = target_line[indx + len(uplink):].strip()  
+    return UE_answer
+
+    
+def recorded_response(file_name, pacp_file_path, uplink_command, downlink_command):
+
+    ul_command = convert_to_readable(uplink_command)
+    dl_command = convert_to_readable(downlink_command)
+
+    desired_words = [ul_command,dl_command]
+
+    
+    command = [
+        'tshark',
+        '-r', os.path.join(pacp_file_path),
+        '-Y', 'sctp',  #ngap #
+        '-T', 'fields',
+        '-e', 'frame.time_epoch',
+        '-e', 'ip.src',
+        '-e', 'ip.dst',
+        '-e', '_ws.col.Info'
+    ]
+
+    try:
+  
+        output = subprocess.check_output(command, text=True)
+        lines = output.strip().split('\n')
+        ###### for 0.00 format ########
+        #first_timestamp = float(lines[0].split('\t')[0])  # First time of a pcap
+        first_timestamp_str = lines[0].split('\t')[0]
+        
+        # handling exception
+        if first_timestamp_str:
+            try:
+                first_timestamp = float(first_timestamp_str)
+            except ValueError:
+                return None
+        else:
+            return None
+
+
+        for index, line in enumerate(lines):
+            new_time = str(float(line.split('\t')[0]) - first_timestamp)
+            lines[index] = lines[index].replace(line.split('\t')[0], new_time, 1)
+
+        IU_reg_indx = []
+        for index, line in enumerate(lines):
+            if 'InitialUEMessage, Registration request' in line:
+                IU_reg_indx.append(index)
+        
+        if len(IU_reg_indx) == 0:
+            return None
+
+        elif len(IU_reg_indx) == 1:
+            slice_between = '\n'.join(lines)
+            slice_lower = slice_between.lower()
+            desired_words_lower = [word.lower() for word in desired_words]
+            
+            if all(word in slice_lower for word in desired_words_lower):
+                temp_result = get_ul_dl_index_in_slice(slice_between, ul_command, dl_command)
+                if temp_result is not None:
+                    result,dl_com_invoke_line = temp_result
+                    slice_start = IU_reg_indx[0]
+                    return result , IU_reg_indx,slice_start,dl_com_invoke_line
+            else:
+                return None
+
+        elif len(IU_reg_indx) > 1:
+        
+            flag = False
+            for m in range(len(IU_reg_indx) - 1):
+                slice_between = '\n'.join(lines[IU_reg_indx[m]:IU_reg_indx[m + 1]])
+                slice_lower = slice_between.lower()
+                desired_words_lower = [word.lower() for word in desired_words]
+                
+                if all(word in slice_lower for word in desired_words_lower):
+                    flag = True
+                    temp_result = get_ul_dl_index_in_slice(slice_between, ul_command, dl_command)
+                    if temp_result is not None:
+                        result,dl_com_invoke_line = temp_result
+                        slice_start = IU_reg_indx[m]
+                        dl_com_invoke_line = slice_start + dl_com_invoke_line
+                        return result , IU_reg_indx,slice_start, dl_com_invoke_line
+            else:
+                
+                last_index = IU_reg_indx[-1]
+                slice_between = '\n'.join(lines[IU_reg_indx[-1]:])
+                slice_lower = slice_between.lower()
+                desired_words_lower = [word.lower() for word in desired_words]
+                if all(word in slice_lower for word in desired_words_lower):
+                    flag = True
+                    temp_result = get_ul_dl_index_in_slice(slice_between, ul_command, dl_command)
+                    if temp_result is not None:
+                        result,dl_com_invoke_line = temp_result
+                        slice_start = IU_reg_indx[-1]
+                        dl_com_invoke_line = slice_start + dl_com_invoke_line
+                        return result , IU_reg_indx,slice_start, dl_com_invoke_line
+
+            if not flag:
+                return None
+
+    except subprocess.CalledProcessError as e:
+        return None
+
+    except Exception as e:
+        print(f"An unexpected error occurred: {e}")
+        return None
+    
+
+def response_list_finder(uplink_position,downlink_position):
+
+  response_list = []
+
+  ### For registration_request ### 
+  answer_list_01_01 = ['No response','Identity response','Deregistration request (UE originating)']
+  answer_list_01_02 = ['No response',  'Authentication response', 'Deregistration request (UE originating)', '5GMM status (Invalid mandatory information)','Authentication failure (Non-5G authentication unacceptable)', 'Authentication failure (ngKSI already in use)', 'Authentication failure (Synch failure)','Authentication failure (MAC failure)']
+  answer_list_01_03 = ['No response', 'Deregistration request (UE originating)','Security mode reject (Security mode rejected, unspecified)','5GMM status (Invalid mandatory information)','Security mode reject (UE security capabilities mismatch)','Security mode complete']
+  answer_list_01_04 = []
+  answer_list_01_05 = ['No response', 'Deregistration request (UE originating)','5GMM status (Message type not compatible with the protocol state)','Configuration update complete']
+  answer_list_01_06 = ['No response', 'Deregistration request (UE originating)','5GMM status (Message type not compatible with the protocol state)']
+  answer_list_01_07 = ['No response', 'Deregistration request (UE originating)','5GMM status (Message type not compatible with the protocol state)']
+  answer_list_01_08 = ['No response', 'Deregistration request (UE originating)','5GMM status (Message type not compatible with the protocol state)','5GMM status (Invalid mandatory information)']
+  answer_list_01_09 = ['No response', 'Deregistration request (UE originating)','5GMM status (Message type non-existent or not implemented)']
+  answer_list_01_10 = ['No response', 'Deregistration request (UE originating)','5GMM status (Invalid mandatory information)','Deregistration accept (UE terminated)']
+  answer_list_01_11 = []
+  answer_list_01_12 = ['No response', 'Deregistration request (UE originating)']
+  answer_list_01_13 = ['No response', 'Deregistration request (UE originating)']
+
+
+
+  ### For identity_response ###
+  answer_list_02_01 = ['No response','Identity response','Deregistration request (UE originating)']
+  answer_list_02_02 = ['No response',  'Authentication response', 'Deregistration request (UE originating)', '5GMM status (Invalid mandatory information)','Authentication failure (Non-5G authentication unacceptable)', 'Authentication failure (ngKSI already in use)', 'Authentication failure (Synch failure)','Authentication failure (MAC failure)']
+  answer_list_02_03 = ['No response', 'Deregistration request (UE originating)','Security mode reject (Security mode rejected, unspecified)','5GMM status (Invalid mandatory information)','Security mode reject (UE security capabilities mismatch)','Security mode complete']
+  answer_list_02_04 = []
+  answer_list_02_05 = ['No response', 'Deregistration request (UE originating)','5GMM status (Message type not compatible with the protocol state)','Configuration update complete']
+  answer_list_02_06 = ['No response', 'Deregistration request (UE originating)','5GMM status (Message type not compatible with the protocol state)']
+  answer_list_02_07 = ['No response', 'Deregistration request (UE originating)','5GMM status (Message type not compatible with the protocol state)']
+  answer_list_02_08 = ['No response', 'Deregistration request (UE originating)','5GMM status (Message type not compatible with the protocol state)','5GMM status (Invalid mandatory information)']
+  answer_list_02_09 = ['No response', 'Deregistration request (UE originating)','5GMM status (Message type non-existent or not implemented)']
+  answer_list_02_10 = ['No response', 'Deregistration request (UE originating)','5GMM status (Invalid mandatory information)','Deregistration accept (UE terminated)']
+  answer_list_02_11 = []
+  answer_list_02_12 = ['No response', 'Deregistration request (UE originating)']
+  answer_list_02_13 = ['No response', 'Deregistration request (UE originating)']
+
+
+  
+  ### For authentication_response ###
+  answer_list_03_01 = ['No response','Identity response','Deregistration request (UE originating)']
+  answer_list_03_02 = ['No response',  'Authentication response', 'Deregistration request (UE originating)', '5GMM status (Invalid mandatory information)','Authentication failure (Non-5G authentication unacceptable)', 'Authentication failure (ngKSI already in use)', 'Authentication failure (Synch failure)','Authentication failure (MAC failure)']
+  answer_list_03_03 = ['No response', 'Deregistration request (UE originating)','Security mode reject (Security mode rejected, unspecified)','5GMM status (Invalid mandatory information)','Security mode reject (UE security capabilities mismatch)','Security mode complete']
+  answer_list_03_04 = []  
+  answer_list_03_05 = ['No response', 'Deregistration request (UE originating)','5GMM status (Message type not compatible with the protocol state)','Configuration update complete']
+  answer_list_03_06 = ['No response', 'Deregistration request (UE originating)','5GMM status (Message type not compatible with the protocol state)']
+  answer_list_03_07 = ['No response', 'Deregistration request (UE originating)','5GMM status (Message type not compatible with the protocol state)']
+  answer_list_03_08 = ['No response', 'Deregistration request (UE originating)','5GMM status (Message type not compatible with the protocol state)','5GMM status (Invalid mandatory information)']
+  answer_list_03_09 = ['No response', 'Deregistration request (UE originating)','5GMM status (Message type non-existent or not implemented)']
+  answer_list_03_10 = ['No response', 'Deregistration request (UE originating)','5GMM status (Invalid mandatory information)','Deregistration accept (UE terminated)']
+  answer_list_03_11 = []
+  answer_list_03_12 = ['No response', 'Deregistration request (UE originating)']
+  answer_list_03_13 = ['No response', 'Deregistration request (UE originating)']
+
+
+
+
+  ### For security_mode_complete ###
+  answer_list_04_01 = ['No response','Identity response','Deregistration request (UE originating)']
+  answer_list_04_02 = ['No response',  'Authentication response', 'Deregistration request (UE originating)', '5GMM status (Invalid mandatory information)','Authentication failure (Non-5G authentication unacceptable)', 'Authentication failure (ngKSI already in use)', 'Authentication failure (Synch failure)','Authentication failure (MAC failure)']
+  answer_list_04_03 = ['No response', 'Deregistration request (UE originating)','Security mode reject (Security mode rejected, unspecified)','5GMM status (Invalid mandatory information)','Security mode reject (UE security capabilities mismatch)','Security mode complete']
+  answer_list_04_04 = []
+  answer_list_04_05 = ['No response', 'Deregistration request (UE originating)','5GMM status (Message type not compatible with the protocol state)','Configuration update complete']
+  answer_list_04_06 = ['No response', 'Deregistration request (UE originating)','5GMM status (Message type not compatible with the protocol state)']
+  answer_list_04_07 = ['No response', 'Deregistration request (UE originating)','5GMM status (Message type not compatible with the protocol state)']
+  answer_list_04_08 = ['No response', 'Deregistration request (UE originating)','5GMM status (Message type not compatible with the protocol state)','5GMM status (Invalid mandatory information)']
+  answer_list_04_09 = ['No response','Deregistration request (UE originating)','5GMM status (Message type non-existent or not implemented)']
+  answer_list_04_10 = ['No response', 'Deregistration request (UE originating)','5GMM status (Invalid mandatory information)','Deregistration accept (UE terminated)']
+  answer_list_04_11 = ['null']
+  answer_list_04_12 = ['No response', 'Deregistration request (UE originating)']
+  answer_list_04_13 = ['No response', 'Deregistration request (UE originating)']
+
+  ### For registration_complete ###
+  answer_list_05_01 = ['No response','Identity response','Deregistration request (UE originating)']
+  answer_list_05_02 = ['No response',  'Authentication response', 'Deregistration request (UE originating)', '5GMM status (Invalid mandatory information)','Authentication failure (Non-5G authentication unacceptable)', 'Authentication failure (ngKSI already in use)', 'Authentication failure (Synch failure)','Authentication failure (MAC failure)']
+  answer_list_05_03 = ['No response', 'Deregistration request (UE originating)','Security mode reject (Security mode rejected, unspecified)','5GMM status (Invalid mandatory information)','Security mode reject (UE security capabilities mismatch)','Security mode complete']
+  answer_list_05_04 = []
+  answer_list_05_05 = ['No response', 'Deregistration request (UE originating)','5GMM status (Message type not compatible with the protocol state)','Configuration update complete']
+  answer_list_05_06 = ['No response', 'Deregistration request (UE originating)','5GMM status (Message type not compatible with the protocol state)']
+  answer_list_05_07 = ['No response', 'Deregistration request (UE originating)','5GMM status (Message type not compatible with the protocol state)']
+  answer_list_05_08 = ['No response', 'Deregistration request (UE originating)','5GMM status (Message type not compatible with the protocol state)','5GMM status (Invalid mandatory information)']
+  answer_list_05_09 = ['No response','Deregistration request (UE originating)','5GMM status (Message type non-existent or not implemented)']
+  answer_list_05_10 = ['No response', 'Deregistration request (UE originating)','5GMM status (Invalid mandatory information)','Deregistration accept (UE terminated)']
+  answer_list_05_11 = []
+  answer_list_05_12 = ['No response', 'Deregistration request (UE originating)']
+  answer_list_05_13 = ['No response', 'Deregistration request (UE originating)']
+
+  ### For ul_nas_transport ###
+  answer_list_06_01 = ['No response','Identity response','Deregistration request (UE originating)']
+  answer_list_06_02 = ['No response',  'Authentication response', 'Deregistration request (UE originating)', '5GMM status (Invalid mandatory information)','Authentication failure (Non-5G authentication unacceptable)', 'Authentication failure (ngKSI already in use)', 'Authentication failure (Synch failure)','Authentication failure (MAC failure)']
+  answer_list_06_03 = ['No response', 'Deregistration request (UE originating)','Security mode reject (Security mode rejected, unspecified)','5GMM status (Invalid mandatory information)','Security mode reject (UE security capabilities mismatch)','Security mode complete']
+  answer_list_06_04 = []
+  answer_list_06_05 = ['No response', 'Deregistration request (UE originating)','5GMM status (Message type not compatible with the protocol state)','Configuration update complete']
+  answer_list_06_06 = ['No response', 'Deregistration request (UE originating)','5GMM status (Message type not compatible with the protocol state)']
+  answer_list_06_07 = ['No response', 'Deregistration request (UE originating)','5GMM status (Message type not compatible with the protocol state)']
+  answer_list_06_08 = ['No response', 'Deregistration request (UE originating)','5GMM status (Message type not compatible with the protocol state)','5GMM status (Invalid mandatory information)']
+  answer_list_06_09 = ['No response', 'Deregistration request (UE originating)','5GMM status (Message type non-existent or not implemented)']
+  answer_list_06_10 = ['No response', 'Deregistration request (UE originating)','5GMM status (Invalid mandatory information)','Deregistration accept (UE terminated)']
+  answer_list_06_11 = []
+  answer_list_06_12 = ['No response', 'Deregistration request (UE originating)']
+  answer_list_06_13 = ['No response', 'Deregistration request (UE originating)']
+
+
+  ### For service_request ###
+  answer_list_09_01 = ['No response','Identity response','Deregistration request (UE originating)']
+  answer_list_09_02 = ['No response',  'Authentication response', 'Deregistration request (UE originating)', '5GMM status (Invalid mandatory information)','Authentication failure (Non-5G authentication unacceptable)', 'Authentication failure (ngKSI already in use)', 'Authentication failure (Synch failure)','Authentication failure (MAC failure)']
+  answer_list_09_03 = ['No response', 'Deregistration request (UE originating)','Security mode reject (Security mode rejected, unspecified)','5GMM status (Invalid mandatory information)','Security mode reject (UE security capabilities mismatch)','Security mode complete']
+  answer_list_09_04 = []
+  answer_list_09_05 = ['No response', 'Deregistration request (UE originating)','5GMM status (Message type not compatible with the protocol state)','Configuration update complete']
+  answer_list_09_06 = ['No response', 'Deregistration request (UE originating)','5GMM status (Message type not compatible with the protocol state)']
+  answer_list_09_07 = ['No response', 'Deregistration request (UE originating)','5GMM status (Message type not compatible with the protocol state)']
+  answer_list_09_08 = ['No response', 'Deregistration request (UE originating)','5GMM status (Message type not compatible with the protocol state)','5GMM status (Invalid mandatory information)']
+  answer_list_09_09 = ['No response', 'Deregistration request (UE originating)','5GMM status (Message type non-existent or not implemented)']
+  answer_list_09_10 = ['No response', 'Deregistration request (UE originating)','5GMM status (Invalid mandatory information)','Deregistration accept (UE terminated)']
+  answer_list_09_11 = []
+  answer_list_09_12 = ['No response', 'Deregistration request (UE originating)']
+  answer_list_09_13 = ['No response', 'Deregistration request (UE originating)']
+
+
+  if(uplink_position == 1 and downlink_position == 1):
+    response_list = answer_list_01_01
+  elif(uplink_position == 1 and downlink_position == 2):
+    response_list = answer_list_01_02
+  elif(uplink_position == 1 and downlink_position == 3):
+    response_list = answer_list_01_03
+  elif(uplink_position == 1 and downlink_position == 4):
+    response_list = answer_list_01_04
+  elif(uplink_position == 1 and downlink_position == 5):
+    response_list = answer_list_01_05
+  elif(uplink_position == 1 and downlink_position == 6):
+    response_list = answer_list_01_06
+  elif(uplink_position == 1 and downlink_position == 7):
+    response_list = answer_list_01_07
+  elif(uplink_position == 1 and downlink_position == 8):
+    response_list = answer_list_01_08
+  elif(uplink_position == 1 and downlink_position == 9):
+    response_list = answer_list_01_09
+  elif(uplink_position == 1 and downlink_position == 10):
+    response_list = answer_list_01_10
+  elif(uplink_position == 1 and downlink_position == 11):
+    response_list = answer_list_01_11
+  elif(uplink_position == 1 and downlink_position == 12):
+    response_list = answer_list_01_12
+  elif(uplink_position == 1 and downlink_position == 13):
+    response_list = answer_list_01_13
+  elif(uplink_position == 2 and downlink_position == 1):
+    response_list = answer_list_02_01
+  elif(uplink_position == 2 and downlink_position == 2):
+    response_list = answer_list_02_02
+  elif(uplink_position == 2 and downlink_position == 3):
+    response_list = answer_list_02_03
+  elif(uplink_position == 2 and downlink_position == 4):
+    response_list = answer_list_02_04
+  elif(uplink_position == 2 and downlink_position == 5):
+    response_list = answer_list_02_05
+  elif(uplink_position == 2 and downlink_position == 6):
+    response_list = answer_list_02_06
+  elif(uplink_position == 2 and downlink_position == 7):
+    response_list = answer_list_02_07
+  elif(uplink_position == 2 and downlink_position == 8):
+    response_list = answer_list_02_08
+  elif(uplink_position == 2 and downlink_position == 9):
+    response_list = answer_list_02_09
+  elif(uplink_position == 2 and downlink_position == 10):
+    response_list = answer_list_02_10
+  elif(uplink_position == 2 and downlink_position == 11):
+    response_list = answer_list_02_11
+  elif(uplink_position == 2 and downlink_position == 12):
+    response_list = answer_list_02_12
+  elif(uplink_position == 2 and downlink_position == 13):
+    response_list = answer_list_02_13
+  elif(uplink_position == 3 and downlink_position == 1):
+    response_list = answer_list_03_01
+  elif(uplink_position == 3 and downlink_position == 2):
+    response_list = answer_list_03_02
+  elif(uplink_position == 3 and downlink_position == 3):
+    response_list = answer_list_03_03
+  elif(uplink_position == 3 and downlink_position == 4):
+    response_list = answer_list_03_04
+  elif(uplink_position == 3 and downlink_position == 5):
+    response_list = answer_list_03_05
+  elif(uplink_position == 3 and downlink_position == 6):
+    response_list = answer_list_03_06
+  elif(uplink_position == 3 and downlink_position == 7):
+    response_list = answer_list_03_07
+  elif(uplink_position == 3 and downlink_position == 8):
+    response_list = answer_list_03_08
+  elif(uplink_position == 3 and downlink_position == 9):
+    response_list = answer_list_03_09
+  elif(uplink_position == 3 and downlink_position == 10):
+    response_list = answer_list_03_10
+  elif(uplink_position == 3 and downlink_position == 11):
+    response_list = answer_list_03_11
+  elif(uplink_position == 3 and downlink_position == 12):
+    response_list = answer_list_03_12
+  elif(uplink_position == 3 and downlink_position == 13):
+    response_list = answer_list_03_13
+  elif(uplink_position == 4 and downlink_position == 1):
+    response_list = answer_list_04_01
+  elif(uplink_position == 4 and downlink_position == 2):
+    response_list = answer_list_04_02
+  elif(uplink_position == 4 and downlink_position == 3):
+    response_list = answer_list_04_03
+  elif(uplink_position == 4 and downlink_position == 4):
+    response_list = answer_list_04_04
+  elif(uplink_position == 4 and downlink_position == 5):
+    response_list = answer_list_04_05
+  elif(uplink_position == 4 and downlink_position == 6):
+    response_list = answer_list_04_06
+  elif(uplink_position == 4 and downlink_position == 7):
+    response_list = answer_list_04_07
+  elif(uplink_position == 4 and downlink_position == 8):
+    response_list = answer_list_04_08
+  elif(uplink_position == 4 and downlink_position == 9):
+    response_list = answer_list_04_09
+  elif(uplink_position == 4 and downlink_position == 10):
+    response_list = answer_list_04_10
+  elif(uplink_position == 4 and downlink_position == 11):
+    response_list = answer_list_04_11
+  elif(uplink_position == 4 and downlink_position == 12):
+    response_list = answer_list_04_12
+  elif(uplink_position == 4 and downlink_position == 13):
+    response_list = answer_list_04_13
+  elif(uplink_position == 5 and downlink_position == 1):
+    response_list = answer_list_05_01
+  elif(uplink_position == 5 and downlink_position == 2):
+    response_list = answer_list_05_02
+  elif(uplink_position == 5 and downlink_position == 3):
+    response_list = answer_list_05_03
+  elif(uplink_position == 5 and downlink_position == 4):
+    response_list = answer_list_05_04
+  elif(uplink_position == 5 and downlink_position == 5):
+    response_list = answer_list_05_05
+  elif(uplink_position == 5 and downlink_position == 6):
+    response_list = answer_list_05_06
+  elif(uplink_position == 5 and downlink_position == 7):
+    response_list = answer_list_05_07
+  elif(uplink_position == 5 and downlink_position == 8):
+    response_list = answer_list_05_08
+  elif(uplink_position == 5 and downlink_position == 9):
+    response_list = answer_list_05_09
+  elif(uplink_position == 5 and downlink_position == 10):
+    response_list = answer_list_05_10
+  elif(uplink_position == 5 and downlink_position == 11):
+    response_list = answer_list_05_11
+  elif(uplink_position == 5 and downlink_position == 12):
+    response_list = answer_list_05_12
+  elif(uplink_position == 5 and downlink_position == 13):
+    response_list = answer_list_05_13
+  elif(uplink_position == 6 and downlink_position == 1):
+    response_list = answer_list_06_01
+  elif(uplink_position == 6 and downlink_position == 2):
+    response_list = answer_list_06_02
+  elif(uplink_position == 6 and downlink_position == 3):
+    response_list = answer_list_06_03
+  elif(uplink_position == 6 and downlink_position == 4):
+    response_list = answer_list_06_04
+  elif(uplink_position == 6 and downlink_position == 5):
+    response_list = answer_list_06_05
+  elif(uplink_position == 6 and downlink_position == 6):
+    response_list = answer_list_06_06
+  elif(uplink_position == 6 and downlink_position == 7):
+    response_list = answer_list_06_07
+  elif(uplink_position == 6 and downlink_position == 8):
+    response_list = answer_list_06_08
+  elif(uplink_position == 6 and downlink_position == 9):
+    response_list = answer_list_06_09
+  elif(uplink_position == 6 and downlink_position == 10):
+    response_list = answer_list_06_10
+  elif(uplink_position == 6 and downlink_position == 11):
+    response_list = answer_list_06_11
+  elif(uplink_position == 6 and downlink_position == 12):
+    response_list = answer_list_06_12
+  elif(uplink_position == 6 and downlink_position == 13):
+    response_list = answer_list_06_13
+  elif(uplink_position == 9 and downlink_position == 1):
+    response_list = answer_list_09_01
+  elif(uplink_position == 9 and downlink_position == 2):
+    response_list = answer_list_09_02
+  elif(uplink_position == 9 and downlink_position == 3):
+    response_list = answer_list_09_03
+  elif(uplink_position == 9 and downlink_position == 4):
+    response_list = answer_list_09_04
+  elif(uplink_position == 9 and downlink_position == 5):
+    response_list = answer_list_09_05
+  elif(uplink_position == 9 and downlink_position == 6):
+    response_list = answer_list_09_06
+  elif(uplink_position == 9 and downlink_position == 7):
+    response_list = answer_list_09_07
+  elif(uplink_position == 9 and downlink_position == 8):
+    response_list = answer_list_09_08
+  elif(uplink_position == 9 and downlink_position == 9):
+    response_list = answer_list_09_09
+  elif(uplink_position == 9 and downlink_position == 10):
+    response_list = answer_list_09_10
+  elif(uplink_position == 9 and downlink_position == 11):
+    response_list = answer_list_09_11
+  elif(uplink_position == 9 and downlink_position == 12):
+    response_list = answer_list_09_12
+  elif(uplink_position == 9 and downlink_position == 13):
+    response_list = answer_list_09_13
+
+  return response_list
+
+
+
+
+def cipher_algorithm_mapping_name(cipher_algorithm):
+    
+    if cipher_algorithm == 0:
+        name = '5G-EA0 (null)'
+    elif cipher_algorithm == 1:
+        name = '128-5G-EA1'
+    elif cipher_algorithm == 2:
+        name = '128-5G-EA2'
+    elif cipher_algorithm == 3:
+        name = '128-5G-EA3'
+    elif cipher_algorithm == 4:
+        name = '5G-EA4'
+    elif cipher_algorithm == 5:
+        name = '5G-EA5'
+    elif cipher_algorithm == 6:
+        name = '5G-EA6'
+    elif cipher_algorithm == 7:
+        name = '5G-EA7'
+    else:
+        name = 'Unknown Cipher Algorithm'
+    
+    return name
+        
+def integrity_algorithm_mapping_name(integrity_algorithm):
+    
+    if integrity_algorithm == 0:
+        name = '5G- IA0 (null)'
+    elif integrity_algorithm == 1:
+        name = '128-5G-IA1'
+    elif integrity_algorithm == 2:
+        name = '128-5G-IA2'
+    elif integrity_algorithm == 3:
+        name = '128-5G-IA3'
+    elif integrity_algorithm == 4:
+        name = '5G-IA4'
+    elif integrity_algorithm == 5:
+        name = '5G-IA5'
+    elif integrity_algorithm == 6:
+        name = '5G-IA6'
+    elif integrity_algorithm == 7:
+        name = '5G-IA7'
+    else:
+        name = 'Unknown Integrity Algorithm'
+    
+    return name    
+    
+    
+    
+def identity_mapping_name(requested_identity):
+    
+    if requested_identity == 0:
+        name = 'No identity'
+    elif requested_identity == 1:
+        name = 'SUCI'
+    elif requested_identity == 2:
+        name = 'GUTI'
+    elif requested_identity == 3:
+        name = 'IMEI'
+    elif requested_identity == 4:
+        name = 'TMSI'
+    elif requested_identity == 5:
+        name = 'IMEISV'
+    else:
+        name = 'Unknown Identity'
+    
+    return name    
+    
+    
+    
+
+def get_tshark_output(pcap_file, field_name, dl_com_invoke_line):
+    try:
+        line_number = int(dl_com_invoke_line)  + 1  # for solving start from 0
+        command = f"tshark -r {pcap_file} -T fields -e {field_name} | awk 'NR=={line_number}'"
+        process = subprocess.Popen(command, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+        stdout, stderr = process.communicate()
+        process.terminate()
+
+        if process.returncode == 0:
+            output = stdout.strip()
+            return output
+        else:
+            print("Error executing command:", stderr)
+            return None
+    except Exception as e:
+        print("An error occurred:", str(e))
+        return None 
+    
+    
+    
+def handle_response(pattern, ue_response):
+    if ue_response == ', UL NAS transport, PDU session establishment request':
+        return 'PDU session establishment request'
+    elif ue_response == ', Security mode reject (Security mode rejected, unspecified)':
+        return 'Security mode reject (Security mode rejected, unspecified)'
+    elif ue_response == ', Security mode reject (Security mode rejected, unspecified), UplinkNASTransport, Deregistration request (UE originating)':
+        return 'Security mode reject (Security mode rejected, unspecified)'
+    elif ue_response == ', Security mode reject (Security mode rejected, unspecified), InitialUEMessage, Service request, Service request':
+        return 'Security mode reject (Security mode rejected, unspecified)' 
+    else:
+        match = re.search(pattern, ue_response)
+        if match:
+            return match.group(1).strip()
+        else:
+            return ue_response.strip(', ')
+            
+
+
+
+def message_security_type(dl_params_keys, dl_params_values, downlink_command):
+    dl_com = downlink_command.lower()
+
+    protected_commands = [
+        'security_mode_command',
+        'configuration_update_command',
+        'deregistration_request',
+        'deregistration_accept',
+        'gmm_status',
+        'service_accept',
+        'registration_accept',
+        'authentication_result'
+    ]
+
+    security_type = 'Protected' if dl_com in protected_commands else 'Plain'
+
+    if security_type == 'Protected':
+        key = f'{dl_com}_security'
+        if key in dl_params_keys:
+            index = dl_params_keys.index(key)
+            value = dl_params_values[index]
+
+            if value == 'disabled':
+                security_type = 'Plain'
+
+    return security_type
+
+def security_header_mapping_name(header_type):
+    try:
+        header = int(header_type)
+    except ValueError:
+        return None
+    
+    name = None
+    
+    if header == 0:
+        name = 'Plain NAS message (0)'
+    elif header == 1:
+        name = 'Integrity protected (1)'
+    elif header == 2:
+        name = 'Integrity protected and ciphered (2)'
+    elif header == 3:
+        name = 'Integrity protected with new security context (3)'
+    elif header == 4:
+        name = 'Integrity protected and ciphered with new security context (4)'
+    else:
+        name = 'Unknown'
+    
+    return name
