@@ -77,7 +77,7 @@ The **ASTRA-5G** project is open-source.
 If you are using or referencing this project, please cite the following paper:
 <blockquote style="background-color: #f7f7f7; padding: 10px; border-left: 6px solid #1f618d;">
 <pre>
-@inproceedings{bitsikas23UEframework,
+@inproceedings{khandker24astra5g,
   <span style="color: #c0392b;">title = {ASTRA-5G: Automated Over-the-Air Security Testing and Research Architecture for 5G SA Devices},</span>
   <span style="color: #2980b9;">author = {Khandker, Syed and Guerra, Michele and Bitsikas, Evangelos and Piqueras Jover, Roger and Ranganathan, Aanjhan and Pöpper, Christina},</span>
   <span style="color: #27ae60;">booktitle = {Proceedings of the 17th ACM Conference on Security and Privacy in Wireless and Mobile Networks},</span>
